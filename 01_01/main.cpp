@@ -48,7 +48,6 @@ int main()
 
     // 1970年山手線（西日暮里駅・高輪ゲートウェイ無）
     list<const char*> yamanote1970 = yamanote;
-  
 
     // 各年代毎の駅リストを表示
     PrintStations(yamanote2022, "2022年山手線(西日暮里駅・高輪ゲートウェイ有)");
