@@ -1,11 +1,8 @@
-#include <Windows.h>
 #include <iostream>
-#include <stdio.h>
 
 int main()
 {
 
-    char str[] = "チーム制作頑張ろう";
-    printf("%s", str);
+	std::cout << "Hello, World!" << std::endl;
     return 0;
 }
