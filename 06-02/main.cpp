@@ -50,7 +50,7 @@ void CreateCSVFile(const std::string& filename) {
 
 void LoadCSVInBackground(const std::string& filename) {
 	std::cout << " [スレッド] CSVファイルの読み込みを開始します..." << std::endl;
-	
+
 	// ファイル読み込みをシミュレート
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -94,7 +94,7 @@ void LoadCSVInBackground(const std::string& filename) {
 
 void DisplayMap() {
 	std::lock_guard<std::mutex> lock(mtx);
-	
+
 	if (mapData.empty()) {
 		std::cout << "マップデータがありません" << std::endl;
 		return;
