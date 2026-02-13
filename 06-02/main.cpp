@@ -1,4 +1,4 @@
-#include <iostream>
+#include <Novice.h>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -7,15 +7,17 @@
 #include <string>
 #include <chrono>
 
+const char kWindowTitle[] = "学籍番号";
+
 std::mutex mtx;
 std::vector<std::vector<int>> mapData;
 bool isLoading = true;
 bool loadComplete = false;
+int loadingFrame = 0;
 
 void CreateCSVFile(const std::string& filename) {
 	std::ofstream file(filename);
 	if (!file.is_open()) {
-		std::cerr << "CSVファイルの作成に失敗しました: " << filename << std::endl;
 		return;
 	}
 
@@ -45,19 +47,15 @@ void CreateCSVFile(const std::string& filename) {
 	}
 
 	file.close();
-	std::cout << "CSVファイルを生成しました: " << filename << std::endl;
 }
 
 void LoadCSVInBackground(const std::string& filename) {
-	std::cout << " [スレッド] CSVファイルの読み込みを開始します..." << std::endl;
-
 	// ファイル読み込みをシミュレート
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
 	std::ifstream file(filename);
 	if (!file.is_open()) {
 		std::lock_guard<std::mutex> lock(mtx);
-		std::cerr << "[スレッド] CSVファイルを開けませんでした: " << filename << std::endl;
 		isLoading = false;
 		return;
 	}
@@ -88,87 +86,153 @@ void LoadCSVInBackground(const std::string& filename) {
 		loadComplete = true;
 		isLoading = false;
 	}
-
-	std::cout << " [スレッド] CSVファイルの読み込みが完了しました" << std::endl;
 }
 
-void DisplayMap() {
-	std::lock_guard<std::mutex> lock(mtx);
+// Windowsアプリでのエントリーポイント(main関数)
+int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
-	if (mapData.empty()) {
-		std::cout << "マップデータがありません" << std::endl;
-		return;
-	}
+	// ライブラリの初期化
+	Novice::Initialize(kWindowTitle, 1280, 720);
 
-	std::cout << "\n=== マップチップ表示 ===" << std::endl;
-	for (const auto& row : mapData) {
-		for (int cell : row) {
-			switch (cell) {
-			case 0:
-				std::cout << "  "; // 空白
-				break;
-			case 1:
-				std::cout << "##";
-				break;
-			case 2:
-				std::cout << "..";
-				break;
-			case 3:
-				std::cout << "**";
-				break;
-			default:
-				std::cout << "??";
-				break;
-			}
-		}
-		std::cout << std::endl;
-	}
-	std::cout << "=====================\n" << std::endl;
-}
+	// キー入力結果を受け取る箱
+	char keys[256] = { 0 };
+	char preKeys[256] = { 0 };
 
-void ShowLoadingAnimation() {
-	const char animation[] = { '|', '/', '-', '\\' };
-	int index = 0;
-
-	while (true) {
-		{
-			std::lock_guard<std::mutex> lock(mtx);
-			if (!isLoading) break;
-		}
-
-		std::cout << "\r読み込み中 " << animation[index % 4] << std::flush;
-		index++;
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-	std::cout << "\r読み込み完了！    " << std::endl;
-}
-
-int main()
-{
 	const std::string csvFilename = "map_data.csv";
-
-	std::cout << "=== マップチップ読み込みプログラム ===" << std::endl;
-	std::cout << "std::threadを使用した並列処理デモ\n" << std::endl;
+	const int TILE_SIZE = 50;
+	const int MAP_OFFSET_X = 340;
+	const int MAP_OFFSET_Y = 110;
 
 	// CSVファイルを生成
 	CreateCSVFile(csvFilename);
 
-	std::cout << "\nバックグラウンドでCSVを読み込みます...\n" << std::endl;
-
-	// バックグラウンドでCSV読み込み
+	// バックグラウンドでCSV読み込み開始
 	std::thread loadThread(LoadCSVInBackground, csvFilename);
 
-	// ローディングアニメーション表示
-	std::thread animationThread(ShowLoadingAnimation);
+	// ウィンドウの×ボタンが押されるまでループ
+	while (Novice::ProcessMessage() == 0) {
+		// フレームの開始
+		Novice::BeginFrame();
+
+		// キー入力を受け取る
+		memcpy(preKeys, keys, 256);
+		Novice::GetHitKeyStateAll(keys);
+
+		///
+		/// ↓更新処理ここから
+		///
+
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			if (isLoading) {
+				loadingFrame++;
+			}
+		}
+
+		///
+		/// ↑更新処理ここまで
+		///
+
+		///
+		/// ↓描画処理ここから
+		///
+
+		// タイトル表示
+		Novice::ScreenPrintf(10, 10, "=== Map Chip Loader with std::thread ===");
+
+		bool currentlyLoading = false;
+		bool currentlyComplete = false;
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			currentlyLoading = isLoading;
+			currentlyComplete = loadComplete;
+		}
+
+		if (currentlyLoading) {
+			// ローディングアニメーション
+			const char* animation[] = { "|", "/", "-", "\\" };
+			int animIndex = (loadingFrame / 10) % 4;
+
+			Novice::ScreenPrintf(10, 50, "Loading... %s", animation[animIndex]);
+			Novice::ScreenPrintf(10, 80, "Reading CSV file in background...");
+		} else if (currentlyComplete) {
+			Novice::ScreenPrintf(10, 50, "Loading Complete!");
+
+			// マップデータを描画
+			{
+				std::lock_guard<std::mutex> lock(mtx);
+
+				if (!mapData.empty()) {
+					for (size_t y = 0; y < mapData.size(); ++y) {
+						for (size_t x = 0; x < mapData[y].size(); ++x) {
+							int drawX = MAP_OFFSET_X + static_cast<int>(x) * TILE_SIZE;
+							int drawY = MAP_OFFSET_Y + static_cast<int>(y) * TILE_SIZE;
+
+							unsigned int color = 0x000000FF;
+
+							switch (mapData[y][x]) {
+							case 0: // 空白
+								color = 0xFFFFFFFF;
+								break;
+							case 1: // 壁
+								color = 0x333333FF;
+								break;
+							case 2: // 道
+								color = 0xCCCCCCFF;
+								break;
+							case 3: // 特殊
+								color = 0xFF6600FF;
+								break;
+							default:
+								color = 0xFF00FFFF;
+								break;
+							}
+
+							Novice::DrawBox(drawX, drawY, TILE_SIZE, TILE_SIZE, 0.0f, color, kFillModeSolid);
+							Novice::DrawBox(drawX, drawY, TILE_SIZE, TILE_SIZE, 0.0f, 0x000000FF, kFillModeWireFrame);
+						}
+					}
+				}
+			}
+
+			// 凡例表示
+			Novice::ScreenPrintf(10, 80, "Legend:");
+			Novice::DrawBox(20, 110, 30, 30, 0.0f, 0xFFFFFFFF, kFillModeSolid);
+			Novice::DrawBox(20, 110, 30, 30, 0.0f, 0x000000FF, kFillModeWireFrame);
+			Novice::ScreenPrintf(60, 115, "0: Empty");
+
+			Novice::DrawBox(20, 150, 30, 30, 0.0f, 0x333333FF, kFillModeSolid);
+			Novice::DrawBox(20, 150, 30, 30, 0.0f, 0x000000FF, kFillModeWireFrame);
+			Novice::ScreenPrintf(60, 155, "1: Wall");
+
+			Novice::DrawBox(20, 190, 30, 30, 0.0f, 0xCCCCCCFF, kFillModeSolid);
+			Novice::DrawBox(20, 190, 30, 30, 0.0f, 0x000000FF, kFillModeWireFrame);
+			Novice::ScreenPrintf(60, 195, "2: Path");
+
+			Novice::DrawBox(20, 230, 30, 30, 0.0f, 0xFF6600FF, kFillModeSolid);
+			Novice::DrawBox(20, 230, 30, 30, 0.0f, 0x000000FF, kFillModeWireFrame);
+			Novice::ScreenPrintf(60, 235, "3: Special");
+		}
+
+		///
+		/// ↑描画処理ここまで
+		///
+
+		// フレームの終了
+		Novice::EndFrame();
+
+		// ESCキーが押されたらループを抜ける
+		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
+			break;
+		}
+	}
 
 	// スレッドの完了を待つ
-	loadThread.join();
-	animationThread.join();
+	if (loadThread.joinable()) {
+		loadThread.join();
+	}
 
-	// マップを表示
-	DisplayMap();
-
-	std::cout << "プログラムを終了します。" << std::endl;
-
+	// ライブラリの終了
+	Novice::Finalize();
 	return 0;
 }
